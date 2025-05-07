@@ -4,16 +4,22 @@
 #include "event.h"
 #include <stdio.h>
 
-#define HIGH 0x80
+// For Blink pattern
+static UChar pattern_index_new_selected;     // New selected pattern
+
+#define HIGH 0x8000
 #define LOW 0x00
+
 
 #define ACKFRQ 614.4 // kHz
 #define TIMEBASE 50  //ms
-#define PATTERN_COUNT 6
+#define AMOUNT_BLINK_PATTERNS 6
+
+
 #define SCALING ((UInt)(ACKFRQ * TIMEBASE))
 #define TICK(t) ((SCALING / 64) * ((t) / TIMEBASE) - 1)
 
-
+// Amount of ticks
 LOCAL const UInt blink_pattern[] =
 {
     HIGH | TICK(2000), LOW | TICK(500), 0,
@@ -24,12 +30,18 @@ LOCAL const UInt blink_pattern[] =
     LOW | TICK(500), HIGH | TICK(500), LOW | TICK(500), HIGH | TICK(500), LOW | TICK(500), HIGH | TICK(500), LOW | TICK(1500), 0
 };
 
-const UInt *const pattern_table[PATTERN_COUNT] =
+// Pointer to the start of a pattern
+const UInt *const pattern_pointers[AMOUNT_BLINK_PATTERNS] =
 {
-    &blink_pattern[0], &blink_pattern[3], &blink_pattern[6], &blink_pattern[9], &blink_pattern[13], &blink_pattern[19]
+    &blink_pattern[0],    // Pattern 1
+    &blink_pattern[3],    // Pattern 2
+    &blink_pattern[6],    // Pattern 3
+    &blink_pattern[9],    // Pattern 4
+    &blink_pattern[13],   // Pattern 5
+    &blink_pattern[19]    // Pattern 6
 };
 
-static UChar pattern_index_new_selected; 
+// Select next pattern (called in main)
 GLOBAL Void set_blink_muster(UInt arg)
 {
     pattern_index_new_selected = arg;
@@ -38,37 +50,37 @@ GLOBAL Void set_blink_muster(UInt arg)
 #pragma FUNC_ALWAYS_INLINE(TA0_init)
 GLOBAL Void TA0_init(Void)
 {
-    pattern_index_new_selected = MUSTER1;
+	pattern_index_new_selected = MUSTER1;
 
-   TA0CTL   = 0; // stop mode, disable and clear flags
-   TA0CCTL0 = 0; // no capture mode, compare mode
-                 // clear and disable interrupt flag
-   TA0CCR0  = 0xFFFF;       // set up Compare Register
-   TA0EX0   = TAIDEX_0;     // set up expansion register
-   TA0CTL   = TASSEL__ACLK  // 613.75 kHz
-            | MC__UP        // Up Mode
-            | ID__1         // input divider
-            | TACLR         // clear and start Timer
-            | TAIE          // enable interrupt
-            | TAIFG;        // set interrupt flag
+    TA0CTL   = 0; // stop mode, disable and clear flags
+    TA0CCTL0 = 0; // no capture mode, compare mode
+    TA0CCR0 = 0; // Set up Compare Register
+    TA0EX0 = TAIDEX_7; // Set up expansion register
+
+    TA0CTL = TASSEL__ACLK //614.4 kHz
+    		| MC__UP //Up Mode
+			| ID__8 // /8
+			| TACLR //clear and start Timer
+			| TAIE //enable interrupt
+			| TAIFG; //set interrupt flag
 }
 
 #pragma vector = TIMER0_A1_VECTOR
 __interrupt Void TIMER0_A1_ISR(Void)
 {
-    static UChar pattern_index;
-    static UChar array_index_phase;
+	static UChar pattern_index;                  // Selected pattern
+	static UChar array_index_phase;              // Current phase
 
-    if((*(pattern_table[pattern_index] + array_index_phase)) EQ 0) { // If end of phase, next pattern
+    if((*(pattern_pointers[pattern_index] + array_index_phase)) == 0) { // If end of phase, next pattern
         array_index_phase = 0;
         pattern_index = pattern_index_new_selected;
     }
-    if(TSTBIT(*(pattern_table[pattern_index] + array_index_phase), HIGH)) { // Depending on phase bit, turn LED on/off
+    if(TSTBIT(*(pattern_pointers[pattern_index] + array_index_phase), HIGH)) { // Depending on phase bit, turn LED on/off
         SETBIT(P1OUT, BIT2);
     } else {
         CLRBIT(P1OUT, BIT2);
     }
-    TA0CCR0 = ~HIGH BAND (*(pattern_table[pattern_index] + array_index_phase));
+    TA0CCR0 = ~HIGH & (*(pattern_pointers[pattern_index] + array_index_phase));
     array_index_phase++;
 
     CLRBIT(TA0CTL, TAIFG);

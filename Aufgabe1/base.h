@@ -64,7 +64,6 @@ typedef double          Double;
 typedef float           Float;
 
 
-
 #ifdef Bool /* Bool is defined in <X11/Xlib.h> */
 #undef Bool
 #endif
